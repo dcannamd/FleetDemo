@@ -486,7 +486,7 @@ async function assemble(){
   } catch(err){
     console.error(err);
     out.innerHTML = '<div class="errBox">Assembly failed: ' + esc(err.message) +
-      '<br><br>If running locally, confirm GEMINI_API_KEY is set in your .env file and the server was restarted. If deployed, confirm it is set in your host\'s environment variables.</div>';
+      '<br><br>If running locally, confirm GOOGLE_API_KEY is set in your .env file and the server was restarted. If deployed, confirm it is set in your host\'s environment variables.</div>';
   } finally {
     btn.disabled = false;
     btn.textContent = 'Assemble Demo';
