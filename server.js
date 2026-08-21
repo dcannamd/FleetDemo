@@ -12,14 +12,15 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
+// Check current model names in Google AI Studio if this one is rejected.
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 app.post('/api/assemble', async (req, res) => {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({
-      error: 'Server is missing ANTHROPIC_API_KEY. Set it in your environment variables.'
+      error: 'Server is missing GEMINI_API_KEY. Set it in your environment variables.'
     });
   }
 
@@ -61,33 +62,44 @@ Respond with ONLY a JSON object, no markdown fences, no preamble, matching this 
 
 Give exactly 4 modules, sequenced in delivery order. Be specific to this vertical and persona. Use operational language a seller would actually say, not marketing copy.`;
 
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+
   try {
-    const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+    const upstream = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
+        'x-goog-api-key': apiKey
       },
       body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1600,
-        messages: [{ role: 'user', content: prompt }]
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          // Forces valid JSON back, so no fence-stripping is needed.
+          responseMimeType: 'application/json',
+          maxOutputTokens: 1600,
+          temperature: 0.7
+        }
       })
     });
 
     if (!upstream.ok) {
       const detail = await upstream.text();
-      console.error('Anthropic API error:', upstream.status, detail);
+      console.error('Gemini API error:', upstream.status, detail);
       return res.status(502).json({ error: `Upstream error ${upstream.status}` });
     }
 
     const data = await upstream.json();
-    const text = (data.content || [])
-      .map(b => (b.type === 'text' ? b.text : ''))
+
+    const text = (data?.candidates?.[0]?.content?.parts || [])
+      .map(p => p.text || '')
       .filter(Boolean)
       .join('\n')
       .trim();
+
+    if (!text) {
+      console.error('Empty response:', JSON.stringify(data).slice(0, 500));
+      return res.status(502).json({ error: 'Model returned an empty response.' });
+    }
 
     const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
 
@@ -106,8 +118,8 @@ Give exactly 4 modules, sequenced in delivery order. Be specific to this vertica
   }
 });
 
-app.get('/healthz', (req, res) => res.json({ ok: true, keyPresent: !!process.env.ANTHROPIC_API_KEY }));
+app.get('/healthz', (req, res) => res.json({ ok: true, keyPresent: !!process.env.GEMINI_API_KEY, model: MODEL }));
 
 app.listen(PORT, () => {
-  console.log(`Demo Composer running on port ${PORT}`);
+  console.log(`Demo Composer running on port ${PORT} (Gemini / ${MODEL})`);
 });
