@@ -16,11 +16,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 app.post('/api/assemble', async (req, res) => {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GOOGLE_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({
-      error: 'Server is missing GEMINI_API_KEY. Set it in your environment variables.'
+      error: 'Server is missing GOOGLE_API_KEY. Set it in your environment variables.'
     });
   }
 
@@ -118,7 +118,7 @@ Give exactly 4 modules, sequenced in delivery order. Be specific to this vertica
   }
 });
 
-app.get('/healthz', (req, res) => res.json({ ok: true, keyPresent: !!process.env.GEMINI_API_KEY, model: MODEL }));
+app.get('/healthz', (req, res) => res.json({ ok: true, keyPresent: !!process.env.GOOGLE_API_KEY, model: MODEL }));
 
 app.listen(PORT, () => {
   console.log(`Demo Composer running on port ${PORT} (Gemini / ${MODEL})`);
