@@ -41,14 +41,14 @@ npm install
 ```
 
 **Step 4. Get an API key.**
-Go to console.anthropic.com, create an account if needed, and generate an API key under API Keys. Copy it immediately, since it is only shown once.
+Use your existing Gemini API key, or generate one at aistudio.google.com under Get API Key.
 
-Set a monthly spend limit on the key while you are there. This prototype makes small requests, but a cap protects you regardless.
+Gemini has a free tier with rate limits that this prototype sits comfortably inside. If you are on a paid plan, consider setting a budget cap in Google Cloud regardless.
 
 **Step 5. Create your .env file.**
 Duplicate `.env.example`, rename the copy to `.env`, and paste your key in:
 ```
-ANTHROPIC_API_KEY=sk-ant-your-actual-key-here
+GEMINI_API_KEY=your-actual-key-here
 ```
 `.gitignore` already excludes `.env`, so the key will never reach GitHub.
 
@@ -62,7 +62,7 @@ You should see `Demo Composer running on port 3000`.
 Go to `http://localhost:3000` in your browser. Click through the verticals to confirm the overlay swaps, then click **Assemble Demo** to confirm the AI call works.
 
 **Step 8. Verify the key is loaded.**
-If assembly fails, visit `http://localhost:3000/healthz`. It returns `keyPresent: true` or `false`. If false, your `.env` is missing, misnamed, or the server needs restarting after you created it.
+If assembly fails, visit `http://localhost:3000/healthz`. It returns `keyPresent: true` or `false`, plus the model name in use. If false, your `.env` is missing, misnamed, or the server needs restarting after you created it.
 
 ---
 
@@ -95,7 +95,7 @@ In the Render dashboard, choose **New** then **Web Service**, and connect the Gi
 **Step 4. Add the environment variable.**
 Before deploying, open the **Environment** section and add:
 
-- Key: `ANTHROPIC_API_KEY`
+- Key: `GEMINI_API_KEY`
 - Value: your key
 
 This is the step that keeps the key server-side. The browser never sees it.
@@ -110,7 +110,9 @@ Render's free tier sleeps after inactivity, so the first load after a quiet peri
 
 ## Troubleshooting
 
-**Assembly fails with a 502.** Check the Render logs. Most often the key is wrong, or the model string in `ANTHROPIC_MODEL` is not one your account can access.
+**Assembly fails with a 502.** Check the Render logs. Most often the key is wrong, or the model name in `GEMINI_MODEL` is not one your key can access. Model names change; confirm the current one in Google AI Studio and set `GEMINI_MODEL` accordingly.
+
+**Assembly fails with a 429.** You have hit Gemini's free-tier rate limit. Wait a minute and retry, or move to a paid tier before a live demo.
 
 **Assembly fails with "unparseable output."** The model returned prose instead of JSON. Refresh and retry; if it persists, the prompt in `server.js` may need a stronger instruction to return JSON only.
 
@@ -127,3 +129,5 @@ Render's free tier sleeps after inactivity, so the first load after a quiet peri
 **Edit the core spine:** the `CORE_SPINE` array sits directly above it.
 
 **Change what the AI returns:** the prompt lives in `server.js` inside the `/api/assemble` route. The requested JSON shape is specified there, and the frontend renders whatever fields come back.
+
+**Switch model providers:** only the fetch block inside `/api/assemble` is provider-specific. The route contract, the frontend, and everything else stay the same. Swapping providers means changing the endpoint, the request body shape, and the line that extracts text from the response.
