@@ -16,11 +16,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 app.post('/api/assemble', async (req, res) => {
-  const apiKey = process.env.GOOGLE_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({
-      error: 'Server is missing GOOGLE_API_KEY. Set it in your environment variables.'
+      error: 'Server is missing GEMINI_API_KEY. Set it in your environment variables.'
     });
   }
 
@@ -76,7 +76,12 @@ Give exactly 4 modules, sequenced in delivery order. Be specific to this vertica
         generationConfig: {
           // Forces valid JSON back, so no fence-stripping is needed.
           responseMimeType: 'application/json',
-          maxOutputTokens: 1600,
+          // gemini-2.5 models are thinking models: reasoning tokens count
+          // against this budget. Set thinkingBudget to 0 so the whole
+          // allowance goes to the actual JSON output, and keep the ceiling
+          // high enough that the object always closes.
+          thinkingConfig: { thinkingBudget: 0 },
+          maxOutputTokens: 8192,
           temperature: 0.7
         }
       })
@@ -90,15 +95,22 @@ Give exactly 4 modules, sequenced in delivery order. Be specific to this vertica
 
     const data = await upstream.json();
 
-    const text = (data?.candidates?.[0]?.content?.parts || [])
+    const candidate = data?.candidates?.[0];
+    const finishReason = candidate?.finishReason;
+
+    const text = (candidate?.content?.parts || [])
       .map(p => p.text || '')
       .filter(Boolean)
       .join('\n')
       .trim();
 
     if (!text) {
-      console.error('Empty response:', JSON.stringify(data).slice(0, 500));
-      return res.status(502).json({ error: 'Model returned an empty response.' });
+      console.error('Empty response. finishReason:', finishReason, JSON.stringify(data).slice(0, 500));
+      return res.status(502).json({ error: `Model returned an empty response (finishReason: ${finishReason || 'unknown'}).` });
+    }
+
+    if (finishReason && finishReason !== 'STOP') {
+      console.error('Non-STOP finishReason:', finishReason);
     }
 
     const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -107,8 +119,11 @@ Give exactly 4 modules, sequenced in delivery order. Be specific to this vertica
     try {
       parsed = JSON.parse(cleaned);
     } catch (e) {
-      console.error('Parse failure. Raw text:', cleaned.slice(0, 500));
-      return res.status(502).json({ error: 'Model returned unparseable output.' });
+      console.error('Parse failure. finishReason:', finishReason, '| length:', cleaned.length, '| tail:', cleaned.slice(-200));
+      const hint = finishReason === 'MAX_TOKENS'
+        ? 'Response was truncated before the JSON closed. Raise maxOutputTokens in server.js.'
+        : 'Model returned unparseable output.';
+      return res.status(502).json({ error: hint });
     }
 
     res.json(parsed);
@@ -118,7 +133,7 @@ Give exactly 4 modules, sequenced in delivery order. Be specific to this vertica
   }
 });
 
-app.get('/healthz', (req, res) => res.json({ ok: true, keyPresent: !!process.env.GOOGLE_API_KEY, model: MODEL }));
+app.get('/healthz', (req, res) => res.json({ ok: true, keyPresent: !!process.env.GEMINI_API_KEY, model: MODEL }));
 
 app.listen(PORT, () => {
   console.log(`Demo Composer running on port ${PORT} (Gemini / ${MODEL})`);
